@@ -1,0 +1,5 @@
+*.csv filter=lfs diff=lfs merge=lfs -text
+*.ipynb filter=lfs diff=lfs merge=lfs -text
+*cluster_data_*.json filter=lfs diff=lfs merge=lfs -text
+*us-county-boundaries.geojson filter=lfs diff=lfs merge=lfs -text
+*cluster_data_0.1.json filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+va_adult_activity_location_assignment_week.csv
+__pycache__
+output/runs/charlottesville_city/neighbors.json
+output/runs/albemarle/neighbors.json
+*.csv*

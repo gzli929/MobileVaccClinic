@@ -4,15 +4,16 @@ import tqdm
 from os import path
 from mobile.utils import *
 from mobile.heuristics import *
-from mobile.config import LOCATIONS, CLIENT_LOCATIONS
+from mobile.config import aggregate_data
 
 county_name = "albemarle"
 
-with open(PROJECT_ROOT/'output'/'runs'/county_name/'neighbors.json', 'r') as f:
-    neighbors = {int(key): val for key, val in json.load(f)['neighbors'].items()}
+LOCATIONS, CLIENT_LOCATIONS = aggregate_data(county_name = county_name, aggregation = 1, radius = 0.025, home_work_only=False)
 
-def generate_new_information(neighbors, radius):
+def generate_new_information(LOCATIONS, CLIENT_LOCATIONS, neighbors, radius):
+    
     print("Clustering")
+    
     cluster_dict = {}
     for n, ngbrs in tqdm.tqdm(neighbors.items()):
         index = 0
@@ -23,6 +24,7 @@ def generate_new_information(neighbors, radius):
         cluster_dict[n] = cluster_value
     
     print("Choosing")
+    
     cover = set()
     chosen_points = set()
     while len(cover) < len(LOCATIONS):
@@ -37,11 +39,6 @@ def generate_new_information(neighbors, radius):
             break
         cover = cover.union(max_choice[1])
         chosen_points.add(max_choice[2])
-        
-    '''coverage_matching = {}
-    for cluster in cluster_dict.keys():
-        overlap = [member for member in cluster_dict[cluster] if member in chosen_points]
-        coverage_matching[cluster] = overlap'''
     
     loc_pid_clustered = {}
     for point in chosen_points:
@@ -52,21 +49,12 @@ def generate_new_information(neighbors, radius):
     for point in range(len(LOCATIONS)):
         if LOCATIONS[point]['home']:
             loc_pid_clustered[point] = set(LOCATIONS[point]['pid'])
-    '''
-    client_loc_clustered = {}
-    for c in CLIENT_LOCATIONS:
-        new_client = []
-        for loc in CLIENT_LOCATIONS[c]:
-            if LOCATIONS[loc]['home']:
-                new_client += [loc]
-            else:
-                new_client += coverage_matching[loc]
-        client_loc_clustered[c] = set(new_client)'''
+
     
     return chosen_points, loc_pid_clustered
 
 
-def cover_approx_cluster(neighbors, k: int, cluster_radius: float, loc_pid_clustered, lower_bound, upper_bound):
+def cover_approx_cluster(LOCATIONS, CLIENT_LOCATIONS, neighbors, k: int, cluster_radius: float, loc_pid_clustered, lower_bound, upper_bound):
     
     l = lower_bound
     h = upper_bound
@@ -79,10 +67,7 @@ def cover_approx_cluster(neighbors, k: int, cluster_radius: float, loc_pid_clust
     while h-l > 1e-3:
         r = (l+h)/2
         
-        #sol = set_cover_softmax_cluster(neighbors, loc_pid_clustered, radius = r)
-        #top=10, times = 40
-        sol = set_cover_softmax_cluster(neighbors, loc_pid_clustered, alpha*k, radius = r)
-        
+        sol = set_cover_softmax_cluster(LOCATIONS, CLIENT_LOCATIONS, neighbors, loc_pid_clustered, alpha*k, radius = r)
         # top=10, times = 40
         print(r, len(sol))
         
@@ -95,7 +80,7 @@ def cover_approx_cluster(neighbors, k: int, cluster_radius: float, loc_pid_clust
         
     return facilities, objective
 
-def set_cover_softmax_cluster(neighbors, loc_pid_clustered, k, radius: float, top: int = 1, times: int = 1):
+def set_cover_softmax_cluster(LOCATIONS, CLIENT_LOCATIONS, neighbors, loc_pid_clustered, k, radius: float, top: int = 1, times: int = 1):
 
     radius_dict = {}
 
@@ -111,12 +96,6 @@ def set_cover_softmax_cluster(neighbors, loc_pid_clustered, k, radius: float, to
     
     total_length = len(CLIENT_LOCATIONS)
     #radius_dict_id = ray.put(radius_dict)
-    
-    '''total = []
-    for l, pid in loc_pid_clustered.items():
-        if not LOCATIONS[l]['home']:
-            total += list(pid)
-    total_length = len(set(total))'''
     
     results = []
 
@@ -169,58 +148,37 @@ bounds = {0.1: (2, 4), 0.2: (2, 3.5), 0.3: (2, 3.5), 0.4: (1.5, 3.25), 0.5: (1.5
 
 k = 20
 cluster_radius_fac = {}
-#radi1 = [.09, .11, .19, .21, .29, .31]
-#radi2 = [.39, .41, .49, .51, .59, .61]
-#radi3 = [.14, .16, .24, .26, .34, .36, .44, .46, .54, .56]
-for i in [8, 9, 61, 62]:
+neighbors = generate_sorted_list_parallel(LOCATIONS)
+for i in range(10, 63):
+    
     cluster_radius = i/100
-    
-    filename = PROJECT_ROOT/'output'/'runs'/county_name/f'cluster_data_{cluster_radius}.json'
-    
-    if path.exists(filename):
-        with open(filename, 'r') as f:
-            data = json.load(f)
-            #cluster_dict = data['cluster_dict']
-            #chosen_points = set(data['chosen_points'])
-            #coverage_matching = {int(key): value for key,value in data['coverage_matching'].items()}
-            loc_pid_clustered = {int(key): set(value) for key,value in data['loc_pid_clustered'].items()}
-            #client_loc_clustered = {int(key): set(value) for key,value in data['client_loc_clustered'].items()}
-            new_neighbors = {int(key): value for key,value in data['new_neighbors'].items()}
-    
-    else:
-        chosen_points, loc_pid_clustered = generate_new_information(neighbors, cluster_radius)
-    
-        print("New Neighbors")
-        new_neighbors = {}
-        for n, val in tqdm.tqdm(neighbors.items()):
-            if n in chosen_points:
-                new_val = [v for v in val if v[1] in chosen_points or LOCATIONS[v[1]]['home']]
-                new_neighbors[n] = new_val
-        
-        '''with open(filename, "w") as f:
-            json.dump({"chosen_points": list(chosen_points),
-                        "loc_pid_clustered": {key: list(val) for key, val in loc_pid_clustered.items()}, "new_neighbors": new_neighbors}, f)'''
-        
+
+    chosen_points, loc_pid_clustered = generate_new_information(LOCATIONS, CLIENT_LOCATIONS, neighbors, cluster_radius)
+
+    print("New Neighbors")
+    new_neighbors = {}
+    for n, val in tqdm.tqdm(neighbors.items()):
+        if n in chosen_points:
+            new_val = [v for v in val if v[1] in chosen_points or LOCATIONS[v[1]]['home']]
+            new_neighbors[n] = new_val
+
     if cluster_radius in bounds.keys():
         lower = bounds[cluster_radius][0]
         upper = bounds[cluster_radius][1]
     else:
         lower = 1.5
-        upper = 3.5
+        upper = 4
     
-    fac, obj = cover_approx_cluster(new_neighbors, k, cluster_radius, loc_pid_clustered, lower, upper)
-    assign = assign_facilities(fac)
-    objective_value = calculate_objective(assign)
+    fac, obj = cover_approx_cluster(LOCATIONS, CLIENT_LOCATIONS, new_neighbors, k, cluster_radius, loc_pid_clustered, lower, upper)
+    
+    assign = assign_facilities(LOCATIONS, CLIENT_LOCATIONS, fac)
+    objective_value = calculate_objective(LOCATIONS, assign)
     print(cluster_radius, fac, obj, objective_value)
-    
-    '''fac, assign = fpt_cluster(k, 15, loc_pid_clustered, chosen_points, client_loc_clustered)`
-    cluster_radius_fac[cluster_radius] = {"k": k, "facilities": list(fac), "assignments": assign}'''
-    
+
     cluster_radius_fac[cluster_radius] = {"k": k, "facilities": list(fac), "obj_radius": obj, "objective_value": objective_value, "assignments": assign}
     
     for radius, info in cluster_radius_fac.items():
-        print(radius, info["facilities"], info["obj_radius"], info["objective_value"])
+        print(radius, info["facilities"], info["obj_radius"],  info["objective_value"])
 
-
-with open(PROJECT_ROOT/'output'/'runs'/county_name/f'cluster_exp_cover_smooth11_{k}.json', 'w') as f:
+with open(PROJECT_ROOT/'output'/'runs'/county_name/f'cluster_exp_cover_full.json', 'w') as f:
     json.dump(cluster_radius_fac, f)

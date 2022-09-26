@@ -9,7 +9,29 @@ import scipy.stats
 import scipy.special
 from joblib import Parallel, delayed
 
+"""
+ClientCover Algorithm
+"""
 def cover_approx(LOCATIONS, CLIENT_LOCATIONS, neighbors, k: int, top = 1, times = 1, lower_bound = 0.1, upper_bound = 8):
+    """
+    Performs binary search over the objective/radius search space and applies greedy set cover
+    
+    PARAMETERS
+    ----------
+    LOCATIONS: List[Dict[str, T]]
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+    neighbors: Dict[int, List[List[float, int]]]
+        dictionary mapping a location in LOCATIONS to an asecending sorted List of its distance to all other locations
+    k : int
+        number of facilities to be opened
+    
+    RETURNS
+    ----------
+    facilities : List[int]
+        contains facility indices that are to be opened and placed
+    objective: float
+        the radius chosen by binary search
+    """
     
     l = lower_bound
     h = upper_bound
@@ -36,6 +58,9 @@ def cover_approx(LOCATIONS, CLIENT_LOCATIONS, neighbors, k: int, top = 1, times 
     return facilities, objective
 
 def set_cover_softmax(LOCATIONS, CLIENT_LOCATIONS, neighbors, k, radius: float, top: int = 1, times: int = 1):
+    """
+    Helper algorithm for ClientCover that can take in the argument top and times and select from the top choices instead of only selecting the maximum for greedy
+    """
 
     radius_dict = {}
 
@@ -99,6 +124,9 @@ def set_cover_softmax(LOCATIONS, CLIENT_LOCATIONS, neighbors, k, radius: float, 
     results = sorted(results)
     return results[0][1]
 
+"""
+FPT Algorithm
+"""
 def fpt(LOCATIONS, CLIENT_LOCATIONS, k: int, s: int):
     """
     Picks the s activity locations that cover the most clients (through a set cover approximation)
@@ -107,28 +135,24 @@ def fpt(LOCATIONS, CLIENT_LOCATIONS, k: int, s: int):
     
     PARAMETERS
     ----------
+    LOCATIONS: List[Dict[str, T]]
+    CLIENT_LOCATIONS: Dict[int, List[int]]
     k : int
         number of facilities to be opened
     s : int
         number of activity locations examined
-    aggregation : int
-        the version of aggregation selected
-        0 --> none
-        1 --> set cover: aggregation without repeats in coverage
-        2 --> set cover: aggregation with repeats in coverage
-        
+    
     RETURNS
     ----------
     facilities : List[int]
         contains facility indices that are open
     assignments : List[Tuple[int, int]]
-        visited location and facility assignment indexed by each client
+        list of the visited location and opened facility pair that produces the smallest pairwise distance for each client
     """
     
     potential_facility_locations = cover_most(LOCATIONS, CLIENT_LOCATIONS, s)
     
     #Remove homes from the client_location lists
-    #TODO: Perhaps create mapping for the indices of people before exclusion and after?
     client_locations_excluded = []
     for person in CLIENT_LOCATIONS.values():
         new_list = [p for p in person[1:] if p in potential_facility_locations]
@@ -154,12 +178,17 @@ def fpt(LOCATIONS, CLIENT_LOCATIONS, k: int, s: int):
     return min_obj_guess, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, min_obj_guess[1])
 
 
+"""
+HomeCenter Heuristic
+"""
 def center_of_homes(LOCATIONS, CLIENT_LOCATIONS, k: int):
     """
-    Opens facilities based only on home-locations
+    Opens facilities based only on home-locations for each client
     
     PARAMETERS
     ----------
+    LOCATIONS: List[Dict[str, T]]
+    CLIENT_LOCATIONS: Dict[int, List[int]]
     k : int
         number of facilities to be opened
     
@@ -168,9 +197,8 @@ def center_of_homes(LOCATIONS, CLIENT_LOCATIONS, k: int):
     facilities : List[int]
         contains facility indices that are open
     assignments : List[Tuple[int, int]]
-        visited location and facility assignment indexed by each client
+        list of the visited location and opened facility pair that produces the smallest pairwise distance for each client
     """
-    #print(len(LOCATIONS))
     
     potential_facility_locations = [key for key in range(len(LOCATIONS)) if not LOCATIONS[key]['home']]
     homes = set(locs[0] for locs in CLIENT_LOCATIONS.values())
@@ -180,161 +208,27 @@ def center_of_homes(LOCATIONS, CLIENT_LOCATIONS, k: int):
     return facilities, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities)
 
 
+"""
+MostActivity Heuristic
+"""
 def most_populous(LOCATIONS, CLIENT_LOCATIONS, k: int):
+    """
+    Selects the top k potential facilities that have the most unique pid visitors
+    
+    PARAMETERS
+    ----------
+    LOCATIONS: List[Dict[str, T]]
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+    k: int
+        number of facilities to be opened
+    
+    RETURNS
+    ---------
+    facilities : List[int]
+        contains facility indices that are open
+    assignments : List[Tuple[int, int]]
+        list of the visited location and opened facility pair that produces the smallest pairwise distance for each client
+    """
+    
     facilities = [i for i in range(k)]
     return facilities, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities)
-
-
-
-"""
-Finds center of each client's locations by calculating the average meridian coordinates.
-PARAMETERS
-----------
-k : int
-    number of facilities to be opened
-
-RETURNS
-----------
-facilities : List[int]
-    contains facility indices that are open
-assignments : List[Tuple[int, int]]
-    visited location and facility assignment indexed by each client
-"""
-"""def center_of_centers2(LOCATIONS, CLIENT_LOCATIONS, k: int):
-    clients = []
-    
-    for client in CLIENT_LOCATIONS.values():
-        
-        latitude = []
-        longitude = []
-        for center in client:
-            lat, long = LOCATIONS[center]['latitude'], LOCATIONS[center]['longitude']
-            latitude.append(lat)
-            longitude.append(long)
-        
-        clients.append((sum(latitude)/len(latitude), sum(longitude)/len(longitude)))
-    
-    original_loc_length = len(LOCATIONS)
-    
-    for i in range(len(clients)):
-        LOCATIONS.append({'lid_ind': i+original_loc_length, 'lid': -1, 'longitude': clients[i][1], 'latitude': clients[i][0], 'activity':-1, 'pid':[i]})
-    
-    locations = [i for i in range(original_loc_length) if LOCATIONS[i]['lid'] < HOME_SHIFT]
-    facilities = k_supplier(LOCATIONS, list(range(original_loc_length+ len(clients))), locations, k)
-    
-    del LOCATIONS[original_loc_length: original_loc_length+len(clients)]
-    
-    # print(len(LOCATIONS))
-    
-    return facilities, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities)"""
-
-"""
-PARAMETERS
-----------
-k : int
-    number of facilities to be opened
-
-RETURNS
-----------
-facilities : List[int]
-    contains facility indices that are open
-assignments : List[Tuple[int, int]]
-    visited location and facility assignment indexed by each client
-"""
-    
-"""def center_of_centers(LOCATIONS, CLIENT_LOCATIONS, k: int):
-
-    clients = []
-    
-    for client in CLIENT_LOCATIONS.values():
-        
-        dispersion = 1e10
-        effective_center = -1
-        
-        for center in client:
-            
-            max_dist = 0
-            
-            for loc in client:
-                max_dist = max(calculate_distance(LOCATIONS, center, loc), max_dist)
-                
-            if max_dist < dispersion:
-                dispersion = max_dist
-                effective_center = center
-                
-        clients.append(effective_center)
-        
-    locations = [i for i in range(len(LOCATIONS)) if not LOCATIONS[i]['home']]
-    facilities = k_supplier(LOCATIONS, clients, locations, k)
-    
-    return facilities, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities)"""
-    
-"""
-def most_coverage(LOCATIONS, CLIENT_LOCATIONS, k: int):
-    
-    facilities = cover_most(LOCATIONS, CLIENT_LOCATIONS, k)
-    return facilities, assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities)
-"""
-
-"""
-def robust_k_supplier(LOCATIONS, clients: List[int], locations: List[int], k: int, p: int):
-    
-    l = 0
-    r=100
-
-    to_ret = -1
-    EPSILON = 10**(-4)
-    
-    disk_data = create_disk_data(LOCATIONS, clients, locations)
-    
-    latest_success = []
-    
-    while r-l > EPSILON:
-    
-        mid = l + (r - l) / 2
-        
-        norm_disks, expand_disks = filter_disks(disk_data, mid)
-        is_success, selected_fac = _select_disks(norm_disks, expand_disks, k, p)
-        
-        if is_success:
-            to_ret = mid
-            latest_success = selected_fac
-            r = mid
-        else:
-            l = mid
-    
-    return to_ret, latest_success
-
-def create_disk_data(LOCATIONS, clients: List[int], locations:List[int]):
-    disk_data = {}
-    for l in locations:
-        sorted_dist_clients = []
-        for c in clients:
-            dist = calculate_distance(LOCATIONS, l, c)
-            sorted_dist_clients.append((dist, c))
-        
-        disk_data[l] = sorted(sorted_dist_clients)
-        
-    return disk_data
-
-def _select_disks(norm_disks, expand_disks, k: int, p: int):
-    
-    selected_facilities = []
-    covered = set()
-    
-    for i in range(k):
-        max_add = (0, 0)
-        for n in norm_disks:
-            new_add = set(norm_disks[n])-covered
-            if len(new_add) > max_add[0]:
-                max_add = (len(new_add), n)
-        
-        if max_add[0] == 0:
-            break
-    
-        chosen_fac = max_add[1]
-        covered = covered.union(expand_disks[chosen_fac])
-        selected_facilities.append(chosen_fac)
-    
-    return len(covered) >= p, selected_facilities
-"""

@@ -33,15 +33,6 @@ def calculate_objective(LOCATIONS, assignments: List[Tuple[int, int]], percentil
 def assign_facilities(LOCATIONS, CLIENT_LOCATIONS, facilities: List[int]):
     """
     Assigns clients to their nearest facility from one of their visited locations.
-    
-    PARAMETERS
-    ----------
-        facilities
-            list of facilities that are open
-    RETURNS
-    ----------
-        assignments: List[Tuple[int, int]]
-            lists (visited location, facility) assignment for each client
     """
     
     # TODO: assign top 500 most visited locations
@@ -97,6 +88,9 @@ def sorted_list_parallel_helper(LOCATIONS, l):
     return (l, sorted([(calculate_distance(LOCATIONS, l, j), j) for j in range(len(LOCATIONS))], reverse=False))
 
 def generate_sorted_list_parallel(LOCATIONS):
+    """
+    Generates the neighbors structure for ClientCover
+    """
     
     neighbors = {}
     
@@ -108,36 +102,10 @@ def generate_sorted_list_parallel(LOCATIONS):
     
     return neighbors
 
-def generate_sorted_list(LOCATIONS):
-    """
-    Generate the neighbors data structure used in set cover algorithms
-    """
-    
-    neighbors = {}
-    
-    LOCATIONS_act = [l for l in range(len(LOCATIONS)) if not LOCATIONS[l]['home']]
-    
-    for l in tqdm.tqdm(LOCATIONS_act):
-        sorted_distance_neighbors = []
-        
-        for j in range(len(LOCATIONS)):
-            dist = calculate_distance(LOCATIONS, l, j)
-            sorted_distance_neighbors.append((dist, j))
-            
-        sorted_distance_neighbors = sorted(sorted_distance_neighbors, reverse = False)
-        neighbors[l] = sorted_distance_neighbors
-    
-    return neighbors
-
 def cover_most(LOCATIONS, CLIENT_LOCATIONS, s: int):
     """
     Helper method for FPT: returns the set of activity locations of size s that cover the most clients
     Used with aggregate activity locations
-    
-    aggregation : int
-    the version of aggregation selected
-    0 --> none
-    1 --> set cover: aggregation with repeats in coverage
     """
     
     covered = set()
@@ -190,22 +158,6 @@ def k_supplier(LOCATIONS, clients: List[int], locations: List[int], k: int):
     """
     Solves k-supplier (where client locations and facility locations may not overlap) with Hochbaum-Shmoys
     3-approximation algorithm
-    
-    PARAMETERS
-    ----------
-    distance
-        diagonally-filled adjacency matrix for distances between locations
-    clients
-        each client is associated with a singular location
-    locations
-        points of interest at which facilities can be opened
-    k
-        number of facilities to be opened
-    
-    RETURNS
-    ----------
-    facilities : List[int]
-        the facility locations that are open
     """
     l = 0
     #r = 40075
@@ -235,15 +187,6 @@ def k_supplier(LOCATIONS, clients: List[int], locations: List[int], k: int):
 def _check_radius(LOCATIONS, radius: int, clients: List[int]):
     """Determine the maximal independent set of pairiwse independent client balls with given radius
     
-    PARAMETERS
-    ----------
-    radius
-        from the binary search
-    distances
-        diagonally-filled adjacency matrix for distances between locations
-    clients
-        each client is associated with a singular location
-    
     RETURNS
     ----------
     pairwise_disjoint
@@ -268,24 +211,6 @@ def _check_radius(LOCATIONS, radius: int, clients: List[int]):
 
 def _locate_facilities(LOCATIONS, radius: int, pairwise_disjoint: Set[int], locations: List[int], k: int):
     """Select a facility to open within the given radius for each pairwise_disjoint client
-    
-    PARAMETERS
-    ----------
-    radius
-        from the binary search
-    distances
-        diagonally-filled adjacency matrix for distances between locations
-    pairwise_disjoint
-        clients that are not within a distance of 2*radius from one another
-    locations
-        points of interest where facilities can be opened
-    k
-        number of facilities to be opened
-    
-    RETURNS
-    ----------
-    facilities: List[int]
-        the locations at which facilities are opened
     """
     
     facilities = set()

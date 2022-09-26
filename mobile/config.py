@@ -7,48 +7,40 @@ import pandas as pd
 import geopy.distance
 
 """
-Create global variables
-
 address: namedtuple containing the client index, visited location, and potential facility
 
-HOME_SHIFT : To adjust the lids of residential locations
-
-LOCATIONS : List containing dicts of the following
-    "lid" : The lid (with applied HOME_SHIFT) of a given location
-    "lid_ind" : The index of each location in LOCATIONS
-    "longitude"
-    "latitude"
-    "activity": The number of clients that visit this location
-    "pid" : List of all the pids of clients that visit this location
-
-CLIENT_LOCATIONS : Dict mapping pids of clients to the locations (represented by location indicies from LOCATIONS) each client visits
-
-LOCATIONS_agg : List of dicts of the aggregated locations (within radius 10 m)
-<<<<<<< HEAD
-    "lid_ind" : The sorted order numbering of aggregated locations
-    "longitude" : Longitude of the center
-    "latitude" : Latitude of the center
-=======
-    "lid" : The index of the lid (from LOCATIONS) of the center of the aggregated location
-    "lid_ind" : The index of each location in LOCATIONS
-    "longitude" : Longitude of the center
-    "latitude" : Latitude of the center
-    "members" : The lid indices that belong to this cluster
->>>>>>> 1764347dbd3edc0c22a38dd6f65887bc35634632
-    "activity" : The number of clients that visit this aggregated cluster of locations
-    "pid" : The list of clients that visit this aggregated cluster of locations
-    "home" : Is the location a residential location?
-
-CLIENT_LOCATIONS_agg : Dict mapping pids of clients to the aggregated locations
----------
-
+HOME_SHIFT : to adjust the lids of residential locations
 """
+
 address = namedtuple('address', ['index', 'location', 'facility'])
 HOME_SHIFT=1000000000
 
+############################################## DATA LOADING #######################################################
+
 def create_data_input(county_name: str = 'charlottesville_city', home_work_only = False):
     """
-    LOCATIONS contains the pid of clients that visit the location
+    PARAMETERS
+    ------------
+    county_name: str
+    home_work_only: bool
+    
+    RETURNS
+    ------------
+    LOCATIONS: List[Dict[str, T]]
+        list of locations sorted in descending order of activity; each location represented with a dictionary of the following fields:
+            lid_ind: int
+                the index of the location in the LOCATIONS list
+            longitude: float
+            latitude: float
+            activity: int
+                the number of clients that visit this location
+            pid: List[int]
+                a list of the pids of the clients that visit the location
+            home: bool
+                indicator for whether this location is a home
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+        dictionary matching each pid to a list of locations (with home locations at the beginning) that they visit (represented by the index/lid_ind in LOCATIONS)
+    
     """
     #Read in both the activity and residence locations
     
@@ -98,7 +90,11 @@ def create_data_input(county_name: str = 'charlottesville_city', home_work_only 
 
     return locations.to_dict('index'), client_locations.to_dict('index')
 
+
 def write_data_input(county_name: str = 'charlottesville_city', home_work_only=False):
+    """
+    Calls create_data_input and writes to a JSON file
+    """
     
     if home_work_only:
         filename = "original_1.json"
@@ -111,6 +107,10 @@ def write_data_input(county_name: str = 'charlottesville_city', home_work_only=F
         json.dump(data, f)
 
 def read_data_input(county_name: str = 'charlottesville_city', home_work_only = False):
+    """
+    Checks if JSON file with data exists: if not, it calls create_data_input.
+    Otherwise, it reads from the file and returns LOCATIONS and CLIENT_LOCATIONS (see create_data_input for more details)
+    """
     
     if home_work_only:
         filename = "original_1.json"
@@ -134,18 +134,26 @@ def read_data_input(county_name: str = 'charlottesville_city', home_work_only = 
     CLIENT_LOCATIONS = {int(value['pid']): value['lid'] for ind, value in data["CLIENT_LOCATIONS"].items()}
     return LOCATIONS, CLIENT_LOCATIONS
 
-
-
 ############################################## AGGREGATION #################################################
 
 
 
 def radius_cover(LOCATIONS, CLIENT_LOCATIONS, radius: float, county_name: str = 'charlottesville_city', home_work_only=False):
     """
-    Helper method for set_cover_aggregation
+    Helper method for set_cover_aggregation: generates balls for the given radius and stores chosen locations and radius-coverage mappings in a JSON file
     
-    Generates balls for the given radius
-    Stores chosen locations and radius-coverage mappings in a json file
+    PARAMETERS
+    --------------
+    LOCATIONS: List[Dict[str, T]]
+        list of locations from read_data_input
+    CLIENT_LOCATIONS: Dict[int, List[int]
+        map of client location assignments from read_data_input
+    radius:
+        radius used to form clustered location sets such that for any given location, there is a set containing all locations within radius km from it
+    county_name: str
+        'charlottesville_city' or 'albemarle'
+    home_work_only: bool
+        indicates whether the location is a home
     """
     
     radius_dict = {}
@@ -192,12 +200,42 @@ def radius_cover(LOCATIONS, CLIENT_LOCATIONS, radius: float, county_name: str = 
 
 def set_cover_aggregation(LOCATIONS, CLIENT_LOCATIONS, county_name: str = 'charlottesville_city', radius: float = 0.01, home_work_only=False):
     """
-    Must be run after original LOCATIONS and CLIENT_LOCATIONS are read in
-    
     Creates balls of given radius around each location
     Picks location balls to cover all possible facility locations through set cover approximation
     Creates and returns a version of LOCATIONS and CLIENT_LOCATIONS that are based on the aggregate locs
+    
+    PARAMETERS
+    ------------------
+    LOCATIONS: List[Dict[str, T]]
+        list of unclustered locations from read_data_input
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+        dictionary of client location assignments without clustering from read_data_input
+    county_name: str
+        'charlottesville_city' or 'albemarle'
+    radius: float
+        radius to construct location sets for clustering
+    home_work_only: bool
+        indicates whether the location is a home
+    
+    
+    RETURNS
+    ------------------
+    LOCATIONS: List[Dict[str, T]]
+        list of locations sorted in descending order of activity; each location represented with a dictionary of the following fields:
+            lid_ind: int
+                the index of the location in the LOCATIONS list
+            longitude: float
+            latitude: float
+            activity: int
+                the number of clients that visit this location
+            pid: List[int]
+                a list of the pids of the clients that visit the location
+            home: bool
+                indicator for whether this location is a home
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+        dictionary matching each pid to a list of locations that they visit (represented by the index/lid_ind in LOCATIONS)
     """
+    
     if home_work_only:
         filename = f"radius_cover_{int(1000*radius)}_1.json"
     else:
@@ -283,116 +321,41 @@ def set_cover_aggregation(LOCATIONS, CLIENT_LOCATIONS, county_name: str = 'charl
         CLIENT_LOCATIONS_agg[key] = new_lid_list
     
     return LOCATIONS_agg, CLIENT_LOCATIONS_agg
-"""
-1) Represent each aid by the loc closest to median
-2) Represent each aid by the loc that's least far from all other locs
-3) Represent each aid by most popular loc
-"""
 
-def single_linkage_aggregation(LOCATIONS, CLIENT_LOCATIONS, county_name: str = 'charlottesville_city', radius: float = 0.02):
-    """
-    Must be run after LOCATIONS and CLIENT_LOCATIONS are read in
-    Returns aggregated versions of LOCATIONS and CLIENT_LOCATIONS with single linkage clustering
-    """
-    
-    file_dict = open(PROJECT_ROOT / 'data'/ 'processed'/county_name/"aid2pid.json", 'r')
-    data_dict = json.load(file_dict)
-    AID_LOC = data_dict['data']
-
-    file_client = open(PROJECT_ROOT / 'data'/ 'processed'/county_name/ "pid2aid.json", 'r')
-    data_client = json.load(file_client)
-    AID_CLIENT = {int(key):val for key,val in data_client['data'].items()}
-    
-    lid_to_ind = {}
-    for ind, loc in enumerate(LOCATIONS):
-        lid_to_ind[loc['lid']] = ind
-    
-    aid_to_ind = {}
-    LOCATIONS_agg = []
-
-    for i in range(len(AID_LOC)):
-        
-        if AID_LOC[i]['aid'] >= HOME_SHIFT:
-            new_dict = {"lid_ind" : i,
-                        "longitude" : AID_LOC[i]['longitude'],
-                        "latitude" : AID_LOC[i]['latitude'],
-                        "activity" : AID_LOC[i]["activity"],
-                        "pid" : AID_LOC[i]["visitors"],
-                        "home" : True
-            }
-            
-            aid_to_ind[AID_LOC[i]['aid']] = i
-        
-        else:
-            
-            members_list = [lid_to_ind[m] for m in AID_LOC[i]['members']]
-            
-            min_dist = (10**9, -1, -1)
-            
-            for m in members_list:
-                
-                distance_list = []
-                
-                for b in members_list:
-                        
-                        coord1_row = LOCATIONS[m]
-                        coord2_row = LOCATIONS[b]
-                        
-                        coord1 = (coord1_row['latitude'], coord1_row['longitude'])
-                        coord2 = (coord2_row['latitude'], coord2_row['longitude'])
-                        
-                        dist = geopy.distance.great_circle(coord1, coord2).km
-                        
-                        distance_list.append((dist, m, b))
-                
-                dispersion = max(distance_list)
-                
-                if dispersion[0]<min_dist[0]:
-                    min_dist = dispersion
-            
-            new_dict = {"lid_ind" : i,
-                        "longitude" : LOCATIONS[min_dist[1]]['longitude'],
-                        "latitude" : LOCATIONS[min_dist[1]]['latitude'],
-                        "activity" : AID_LOC[i]["activity"],
-                        "pid" : AID_LOC[i]["visitors"],
-                        "home" : False
-            }
-            
-            aid_to_ind[AID_LOC[i]['aid']] = i
-            
-        LOCATIONS_agg.append(new_dict)
-    
-    CLIENT_LOCATIONS_agg = {}
-    
-    for key in CLIENT_LOCATIONS.keys():
-        new_list = []
-        for loc in AID_CLIENT[key]:
-            
-            if aid_to_ind[loc] >= len(AID_CLIENT):
-                print(loc, aid_to_ind[loc])
-            
-            if loc >= HOME_SHIFT:
-                new_list.insert(0, aid_to_ind[loc])
-            else:
-                new_list.append(aid_to_ind[loc])
-        CLIENT_LOCATIONS_agg[key] = new_list
-    
-    return LOCATIONS_agg, CLIENT_LOCATIONS_agg
 
 def aggregate_data(county_name: str = 'charlottesville_city', aggregation: int = 1, radius: float = 0.01, home_work_only=False):
     """
-    Aggregation Options
+    PARAMETERS
+    ------------
+    county_name: str
+        'charlottesville_city' or 'albemarle'
+    aggregation: int
         0 : default, no aggregation
         1 : set cover aggregation
-        2 : single linkage aggregation
+    radius: float
+        clustering radius to form sets
+    home_work_only: bool
+        only consider home and work locations in client movement patterns (used for information loss experiments)
+    
+    RETURNS
+    ------------
+    LOCATIONS: List[Dict[str, T]]
+        list of locations sorted in descending order of activity; each location represented with a dictionary of the following fields:
+            lid_ind: int
+                the index of the location in the LOCATIONS list
+            longitude: float
+            latitude: float
+            activity: int
+                the number of clients that visit this location
+            pid: List[int]
+                a list of the pids of the clients that visit the location
+            home: bool
+                indicator for whether this location is a home
+    CLIENT_LOCATIONS: Dict[int, List[int]]
+        dictionary matching each pid to a list of locations that they visit (represented by the index/lid_ind in LOCATIONS)
     """
     
     LOCATIONS, CLIENT_LOCATIONS = read_data_input(county_name, home_work_only = home_work_only)
-
-    if aggregation == 2:
-        
-        print("OUTDATED FORM OF AGGREGATION; PLEASE DO NOT USE")
-        return single_linkage_aggregation(LOCATIONS, CLIENT_LOCATIONS, county_name, radius)
         
     elif aggregation == 1:
         

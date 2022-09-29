@@ -357,7 +357,7 @@ def aggregate_data(county_name: str = 'charlottesville_city', aggregation: int =
     
     LOCATIONS, CLIENT_LOCATIONS = read_data_input(county_name, home_work_only = home_work_only)
         
-    elif aggregation == 1:
+    if aggregation == 1:
         
         if home_work_only:
             filename = f"aggregation_{aggregation}_{int(1000*radius)}_1.json"

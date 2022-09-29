@@ -161,7 +161,7 @@ def k_supplier(LOCATIONS, clients: List[int], locations: List[int], k: int):
     """
     l = 0
     #r = 40075
-    r = 20
+    r = 40
 
     to_ret = -1
     #EPSILON = 10**(-6)
